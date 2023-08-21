@@ -204,28 +204,6 @@ export const sinc = (x:number, z:number, t:number) => {
     return vec3.fromValues(x, y, z);
 }
 
-export const getTorusPosition = (R:number, r:number, u:number, v:number) => {
-    let x = (R + r*cos(v)) * cos(u);
-    let y = r * sin(v);
-    let z = -(R + r*cos(v)) * sin(u);
-    return vec3.fromValues(x, y, z);       
-}
-
-export const getCylinderPosition = (radius:number, theta:number, y:number) => {
-    let x = radius * cos(theta);
-    let z = -radius * sin(theta);
-    return vec3.fromValues(x, y, z);
-}
-
-export const getSpherePosition = (radius:number, theta:number, phi:number): vec3 => {
-    // note theta, phi must in radians
-    let x = radius * sin(theta) * cos(phi);
-    let y = radius * cos(theta);
-    let z = -radius * sin(theta) * sin(phi);    
-    return vec3.fromValues(x, y, z);     
-}
-
-
 // utility
 const abs = (x:number) => Math.abs(x);
 const sin = (x:number) => Math.sin(x);

@@ -1,5 +1,5 @@
-import vsShader from '../ch05/shader-vert.wgsl';
-import fsShader from '../ch04/directional-frag.wgsl';
+import vsShader from '../ch02/shader-vert.wgsl';
+import fsShader from '../ch02/directional-frag.wgsl';
 import * as ws from 'webgpu-simplified';
 import { getParametricSurfaceData, ISurfaceInput, ISurfaceOutput } from '../../common/surface-data';
 import { vec3, mat4 } from 'gl-matrix';

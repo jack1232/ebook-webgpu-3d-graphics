@@ -1,11 +1,10 @@
-import vsShader from './shader-instance-vert.wgsl';
-import fsShader from '../ch04/directional-frag.wgsl';
+import vsShader from './shader-vert.wgsl';
+import fsShader from './directional-frag.wgsl';
 import * as ws from 'webgpu-simplified';
 import { getSimpleSurfaceData, ISurfaceInput, ISurfaceOutput } from '../../common/surface-data';
-import { vec3 } from 'gl-matrix';
+import { vec3, mat4 } from 'gl-matrix';
 
-const createPipeline = async (init:ws.IWebGPUInit, data: ISurfaceOutput, 
-numObjects: number): Promise<ws.IPipeline> => {
+const createPipeline = async (init: ws.IWebGPUInit, data: ISurfaceOutput): Promise<ws.IPipeline> => {
     // pipeline for shape
     const descriptor = ws.createRenderPipelineDescriptor({
         init, vsShader, fsShader,
@@ -29,10 +28,8 @@ numObjects: number): Promise<ws.IPipeline> => {
     const indexBuffer = ws.createBufferWithData(init.device, data.indices);
     const indexBuffer2 = ws.createBufferWithData(init.device, data.indices2);
 
-    // uniform buffers for transform matrix
-    const vpUniformBuffer = ws.createBuffer(init.device, 64);
-    const modelUniformBuffer = ws.createBuffer(init.device, 64*numObjects, ws.BufferType.Storage);
-    const normalUniformBuffer = ws.createBuffer(init.device, 64*numObjects, ws.BufferType.Storage);
+    // uniform buffer for transform matrix
+    const  vertUniformBuffer = ws.createBuffer(init.device, 192);
     
     // uniform buffer for light 
     const lightUniformBuffer = ws.createBuffer(init.device, 48);
@@ -41,10 +38,8 @@ numObjects: number): Promise<ws.IPipeline> => {
     const materialUniformBuffer = ws.createBuffer(init.device, 16);
 
     // uniform bind group for vertex shader
-    const vertBindGroup = ws.createBindGroup(init.device, pipeline.getBindGroupLayout(0), 
-        [vpUniformBuffer, modelUniformBuffer, normalUniformBuffer]);
-    const vertBindGroup2 = ws.createBindGroup(init.device, pipeline2.getBindGroupLayout(0), 
-        [vpUniformBuffer, modelUniformBuffer, normalUniformBuffer]);
+    const vertBindGroup = ws.createBindGroup(init.device, pipeline.getBindGroupLayout(0), [vertUniformBuffer]);
+    const vertBindGroup2 = ws.createBindGroup(init.device, pipeline2.getBindGroupLayout(0), [vertUniformBuffer]);
    
     // uniform bind group for fragment shader
     const fragBindGroup = ws.createBindGroup(init.device, pipeline.getBindGroupLayout(1), 
@@ -62,9 +57,7 @@ numObjects: number): Promise<ws.IPipeline> => {
         pipelines: [pipeline, pipeline2],
         vertexBuffers: [positionBuffer, normalBuffer, colorBuffer, colorBuffer2, indexBuffer, indexBuffer2],  
         uniformBuffers: [
-            vpUniformBuffer,    // for vertex
-            modelUniformBuffer,
-            normalUniformBuffer,
+            vertUniformBuffer,    // for vertex
             lightUniformBuffer,   // for fragment
             materialUniformBuffer      
         ],
@@ -74,7 +67,7 @@ numObjects: number): Promise<ws.IPipeline> => {
     };
 }
 
-const draw = (init:ws.IWebGPUInit, p:ws.IPipeline, plotType: string, data: ISurfaceOutput, numObjects: number) => {  
+const draw = (init:ws.IWebGPUInit, p:ws.IPipeline, plotType: string, data: ISurfaceOutput) => {  
     const commandEncoder =  init.device.createCommandEncoder();       
     const descriptor = ws.createRenderPassDescriptor({
         init,
@@ -92,7 +85,7 @@ const draw = (init:ws.IWebGPUInit, p:ws.IPipeline, plotType: string, data: ISurf
         renderPass.setBindGroup(0, p.uniformBindGroups[0]);
         renderPass.setBindGroup(1, p.uniformBindGroups[1]);
         renderPass.setIndexBuffer(p.vertexBuffers[4], 'uint32');
-        renderPass.drawIndexed(data.indices.length, numObjects);
+        renderPass.drawIndexed(data.indices.length);
     }
 
     // draw wireframe
@@ -104,7 +97,7 @@ const draw = (init:ws.IWebGPUInit, p:ws.IPipeline, plotType: string, data: ISurf
         renderPass.setBindGroup(0, p.uniformBindGroups[2]);
         renderPass.setBindGroup(1, p.uniformBindGroups[3]);
         renderPass.setIndexBuffer(p.vertexBuffers[5], 'uint32');
-        renderPass.drawIndexed(data.indices2.length, numObjects);
+        renderPass.drawIndexed(data.indices2.length);
     }
 
     if(plotType === 'surface'){
@@ -123,24 +116,19 @@ const draw = (init:ws.IWebGPUInit, p:ws.IPipeline, plotType: string, data: ISurf
 const run = async () => {
     const canvas = document.getElementById('canvas-webgpu') as HTMLCanvasElement;
     const init = await ws.initWebGPU({canvas, msaaCount: 4});
-    const xSegments = 64;
-    const zSegments = 64;
-    const xNUM = 100;
-    const zNUM = 100;
-    const numObjects = xNUM * zNUM;
-
+    
     let isi: ISurfaceInput = {
         surfaceType: 'sinc',
         nu: 64,
         nv: 64, 
         t: 0,
-        scale: 0.5,
+        scale: 2,
         colormapName: 'jet',
         wireframeColor: 'white',
         colormapDirection: 1,
     };
     let data = getSimpleSurfaceData(isi);
-    let p = await createPipeline(init, data, numObjects);
+    let p = await createPipeline(init, data);
 
     var gui =  ws.getDatGui();
     const params = {
@@ -148,8 +136,10 @@ const run = async () => {
         animateSpeed: 1,
         surfaceType: 'sinc',
         wireframeColor: 'white',
-        scale: 0.5,
-        plotType: 'surface',
+        scale: 2.5,
+        plotType: 'surface_wireframe',
+        xSegments: 64,
+        zSegments: 64,
         colormap: 'jet',
         colormapDirection: 'y',
         specularColor: '#aaaaaa',
@@ -168,10 +158,11 @@ const run = async () => {
     var folder = gui.addFolder('Set Surface Parameters');
     folder.open();
     folder.add(params, 'scale', 0.1, 5, 0.1); 
+    folder.add(params, 'xSegments', 5, 200, 1);
+    folder.add(params, 'zSegments', 5, 200, 1);
     folder.add(params, 'colormap', [
         'autumn', 'bone', 'cool', 'copper', 'greys', 'hsv', 'hot', 'jet', 'rainbow', 'rainbow_soft', 
-        'spring', 'summer', 'winter', 'black', 'blue', 'cyan', 'fuchsia', 'green', 'red', 'white',
-        'yellow'
+        'spring', 'summer', 'winter', 'black', 'blue', 'cyan', 'fuchsia', 'green', 'red', 'white', 'yellow'
     ]); 
     folder.add(params, 'colormapDirection', [
         'x', 'y', 'z'
@@ -182,7 +173,7 @@ const run = async () => {
     }); 
     folder.add(params, 'wireframeColor', [
         'black', 'blue', 'cyan', 'fuchsia', 'green', 'red', 'white', 'yellow', 'autumn', 'bone', 'cool', 
-        'copper', 'greys', 'hsv', 'hot', 'jet', 'rainbow', 'rainbow_soft', 'spring', 'summer', 'winter'
+        'copper', 'greys', 'hsv', 'hot', 'jet', 'rainbow', 'rainbow_soft', 'spring', 'summer', 'winter',
     ]);
     folder.add(params, 'plotType', ['surface', 'wireframe', 'surface_wireframe']);
 
@@ -194,10 +185,13 @@ const run = async () => {
     folder.add(params, 'specular', 0, 1, 0.02);  
     folder.add(params, 'shininess', 0, 300, 1);  
 
-    let vt = ws.createViewTransform([3,4.5,5.2]);
+    let modelMat = mat4.create();
+    let normalMat = mat4.create();
+    let vt = ws.createViewTransform([4,4,4]);
     let viewMat = vt.viewMat;
 
     let aspect = init.size.width / init.size.height;  
+    let rotation = vec3.fromValues(0, 0, 0);  
     let projectMat = ws.createProjectionMat(aspect);  
     let vpMat = ws.combineVpMat(viewMat, projectMat);
    
@@ -205,11 +199,8 @@ const run = async () => {
     let eyePosition = new Float32Array(vt.cameraOptions.eye);
     let lightDirection = new Float32Array([-0.5, -0.5, -0.5]);
     init.device.queue.writeBuffer(p.uniformBuffers[0], 0, vpMat as ArrayBuffer);
-    init.device.queue.writeBuffer(p.uniformBuffers[3], 0, lightDirection);
-    init.device.queue.writeBuffer(p.uniformBuffers[3], 16, eyePosition);
-
-    const mMat = new Float32Array(16* numObjects);
-    const nMat = new Float32Array(16* numObjects);
+    init.device.queue.writeBuffer(p.uniformBuffers[1], 0, lightDirection);
+    init.device.queue.writeBuffer(p.uniformBuffers[1], 16, eyePosition);
 
     let start = performance.now();
     let stats = ws.getStats();
@@ -223,33 +214,23 @@ const run = async () => {
             vpMat = ws.combineVpMat(viewMat, projectMat);
             eyePosition = new Float32Array(camera.eye.flat());
             init.device.queue.writeBuffer(p.uniformBuffers[0], 0, vpMat as ArrayBuffer);
-            init.device.queue.writeBuffer(p.uniformBuffers[3], 16, eyePosition);
+            init.device.queue.writeBuffer(p.uniformBuffers[1], 16, eyePosition);
         }
         var dt = (performance.now() - start)/1000;   
-        let ij = 0;
-        for(let i = 0; i < xNUM; i++){
-            for(let j = 0; j < zNUM; j++){
-                let translation = vec3.fromValues(-190 + 2*i, 2, -180 + 2*j);
-                let rotation = vec3.fromValues(Math.sin(dt * params.rotationSpeed*i/xNUM), 
-                    Math.sin(dt * params.rotationSpeed*j/zNUM), Math.cos(i*j*dt*params.rotationSpeed/numObjects));
-                let scale = vec3.fromValues(1, 1, 1);
-                let m = ws.createModelMat(translation, rotation, scale);
-                let n = ws.createNormalMat(m);
-                mMat.set(m, 16*ij);
-                nMat.set(n, 16*ij);
-                ij++;
-            }
-        }
-
+        rotation[0] = Math.sin(dt * params.rotationSpeed);
+        rotation[1] = Math.cos(dt * params.rotationSpeed); 
+        modelMat = ws.createModelMat([0,0.5,0], rotation);
+        normalMat = ws.createNormalMat(modelMat);
+        
         // update uniform buffers for transformation 
-        init.device.queue.writeBuffer(p.uniformBuffers[1], 0, mMat as ArrayBuffer);  
-        init.device.queue.writeBuffer(p.uniformBuffers[2], 0, nMat as ArrayBuffer);  
+        init.device.queue.writeBuffer(p.uniformBuffers[0], 64, modelMat as ArrayBuffer);  
+        init.device.queue.writeBuffer(p.uniformBuffers[0], 128, normalMat as ArrayBuffer);  
        
         // update uniform buffers for specular light color
-        init.device.queue.writeBuffer(p.uniformBuffers[3], 32, ws.hex2rgb(params.specularColor));
+        init.device.queue.writeBuffer(p.uniformBuffers[1], 32, ws.hex2rgb(params.specularColor));
        
         // update uniform buffer for material
-        init.device.queue.writeBuffer(p.uniformBuffers[4], 0, new Float32Array([
+        init.device.queue.writeBuffer(p.uniformBuffers[2], 0, new Float32Array([
             params.ambient, params.diffuse, params.specular, params.shininess
         ]));
         
@@ -258,8 +239,8 @@ const run = async () => {
         const len0 = data.positions.length;
         isi = {
             surfaceType: params.surfaceType,
-            nu: xSegments,
-            nv: zSegments, 
+            nu: params.xSegments,
+            nv: params.zSegments, 
             t: dt1,
             scale: params.scale,
             colormapName: params.colormap,
@@ -270,7 +251,7 @@ const run = async () => {
         const pData = [data.positions, data.normals, data.colors, data.colors2, data.indices, data.indices2];
         ws.updateVertexBuffers(init.device, p, pData, len0);
 
-        draw(init, p, params.plotType, data, numObjects);      
+        draw(init, p, params.plotType, data);      
     
         requestAnimationFrame(frame);
         stats.end();
